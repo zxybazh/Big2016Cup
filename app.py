@@ -22,30 +22,43 @@ def error(e):
 
 def check(AuthorID, PaperID):
 	global dEbUg
-	data = {
-		"path": "/paper/AuthorIDs/author",
-		"paper": {
-			"type": "Paper",
-			"id" : [73304046],
-			"select": [
-				"OriginalPaperTitle"
-			]
-		},
-		"author": {
-			"type": "Author",
-			"select":[
-				"Name"
-			]
-		}
-	}
-	req = urllib2.Request('http://magraph.cloudapp.net/')
-	req.add_header('Content-Type', 'application/json')
-	response = json.load(urllib2.urlopen(req, json.dumps(data)))
-	if dEbUg: print json.dumps(response, indent=4, sort_keys=True)
-	for AApair in response:
-		if AApair[1]['CellID'] == AuthorID:
-			return True
-	return False
+    data = {
+        "path": "/author",
+        "author": {
+        "type": "Author",
+        "id": [AuthorID],
+        "select":[
+            "Name"
+        ]}
+    }
+    req = urllib2.Request('http://magraph.cloudapp.net/')
+    req.add_header('Content-Type', 'application/json')
+    response = json.load(urllib2.urlopen(req, json.dumps(data)))
+    AuthorName = response[0][0]['Name']
+    data = {
+        "path": "/paper/AuthorIDs/author",
+        "paper": {
+            "type": "Paper",
+            "id" : [PaperID],
+            "select": [
+                "OriginalPaperTitle"
+            ]
+        },
+        "author": {
+            "type": "Author",
+            "select":[
+                "Name"
+            ]
+        }
+    }
+    req = urllib2.Request('http://magraph.cloudapp.net/')
+    req.add_header('Content-Type', 'application/json')
+    response = json.load(urllib2.urlopen(req, json.dumps(data)))
+    if dEbUg: print json.dumps(response, indent=4, sort_keys=True)
+    for AApair in response:
+        if AApair[1]['Name'] == AuthorName:
+            return True
+    return False
 
 @app.route('/big2016/', methods=['POST'])
 def create_task():
