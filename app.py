@@ -1,6 +1,6 @@
 #!flask/bin/python
 from flask import Flask, jsonify, request
-import urllib2, json
+import urllib2, json, re
 
 dEbUg = True
 
@@ -70,6 +70,52 @@ def GetPublicationAuthorPairs(PaperID):
 	}
 	return MAG(data)
 
+def editdistance(s, t):
+	if (abbr(s) or abbr(t)) and s[0] == t[0]:
+		return 0
+	m = len(s) + 1
+	n = len(t) + 1
+	opt = {}
+	for i in xrange(m): opt[i, 0] = i
+	for j in xrange(n): opt[0, j] = j
+	for i in xrange(1, m):
+		for j in xrange(1, n):
+			cost = 0 if s[i-1] == t[j-1] else 1
+			opt[i, j] = min(opt[i, j-1] + 1, opt[i-1, j] + 1, opt[i-1, j-1] + cost)
+	return opt[i, j]
+
+def abbr(x):
+	return len(x) == 1
+
+def VagueMatch(s, t):
+	SplitString = "##############################"
+	infinity = 1e9
+	a = filter(lambda x:len(x) > 0, re.compile("[\W]").split(s))
+	b = filter(lambda x:len(x) > 0, re.compile("[\W]").split(t))
+	if (len(a) == len(b)):
+		for i in xrange(len(a)):
+			if (abbr(a[i]) or abbr(b[i])) and a[i][0] == b[i][0]:
+				a[i] = a[i][0]
+				b[i] = b[i][0]
+		return editdistance(SplitString.join(a), SplitString.join(b)) < 3
+	else:
+		if (len(a) > len(b)): a, b = b, a
+		m = len(a) + 1
+		n = len(b) + 1
+		opt = {}
+		for i in xrange(m): opt[i, 0] = i
+		for j in xrange(n): opt[0, j] = 0
+		for i in xrange(1, m):
+			for j in xrange(i, n):
+				cost = 0 if editdistance(a[i - 1], b[j - 1]) < 2 else 1
+				opt[i, j] = infinity
+				for k in xrange(i-1, j):
+					opt[i, j] = min(opt[i, j], opt[i - 1, k] + cost)
+		ans = infinity
+		for t in xrange(m-1, n):
+			ans = min(opt[m-1, t], ans)
+		return ans < 2
+
 def check(AuthorID, PaperID):
 	global dEbUg
 	AuthorName = GetAuthorName(AuthorID)
@@ -87,9 +133,12 @@ def check(AuthorID, PaperID):
 	if dEbUg: print "Checking Authors..."
 	for PublicationAuthorPair in PublicationAuthorPairs:
 		if dEbUg: print "Checking Author", PublicationAuthorPair[1]['Name']
-		if PublicationAuthorPair[1]['Name'] == AuthorName:
+		if VagueMatch(PublicationAuthorPair[1]['Name'], AuthorName):
 			if dEbUg: print "Name Matched :)"
 			Flag = False
+			if AuthorAffiliations == []:
+				Flag = True
+				print "No Affiliation information >_<"
 			CandidateAuthorAffiliations = GetAuthorAffiliations(PublicationAuthorPair[1]['CellID'])
 			for CandidateAuthorAffiliation in CandidateAuthorAffiliations:
 				for AuthorAffiliation in AuthorAffiliations:
@@ -101,7 +150,10 @@ def check(AuthorID, PaperID):
 			if Flag:
 				return True
 			else:
-				if dEbUg: print "Affiliation Mismatched :("
+				if dEbUg:
+					print "Affiliation Mismatched :("
+					# print AuthorAffiliation
+					# print CandidateAuthorAffiliation
 	return False
 
 @app.route('/big2016/', methods=['POST'])
