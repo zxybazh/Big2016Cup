@@ -1,3 +1,4 @@
+#-*-coding:utf-8-*-
 #!flask/bin/python
 from flask import Flask, jsonify, request
 import pandas as pd, csv, xgboost as xgb, numpy as np, \
@@ -28,6 +29,61 @@ def GetAuthorName(AuthorID):
 	response = MAG(data)
 	if len(response) == 0: return None
 	return response[0][0]['Name']
+
+def GetOriginalPaperTitle(PaperID):
+	data = {
+		"path": "/paper",
+		"paper": {
+			"type": "Paper",
+			"id": [ PaperID ],
+			"select":[ "OriginalPaperTitle" ]
+		}
+	}
+	response = MAG(data)
+	if len(response) == 0: return None
+	return response[0][0]['OriginalPaperTitle']
+
+def GetNormalizedPaperTitle(PaperID):
+	data = {
+		"path": "/paper",
+		"paper": {
+			"type": "Paper",
+			"id": [ PaperID ],
+			"select":[ "NormalizedPaperTitle" ]
+		}
+	}
+	response = MAG(data)
+	if len(response) == 0: return None
+	return response[0][0]['NormalizedPaperTitle']
+
+def GetPublishConference(PaperID):
+	data = {
+		"path": "/paper/*/conferenceseries",
+		"paper": {
+			"type": "Paper",
+			"id": [ PaperID ],
+		},
+		"conferenceseries": {
+			"type": "ConferenceSeries",
+			"select": [ "ShortName" ]
+		}
+	}
+	response = MAG(data)
+	if len(response) == 0: return None
+	return int(response[0][1]['ShortName'])
+
+def GetPublishYear(PaperID):
+	data = {
+		"path": "/paper",
+		"paper": {
+			"type": "Paper",
+			"id": [ PaperID ],
+			"select":[ "PublishYear" ]
+		}
+	}
+	response = MAG(data)
+	if len(response) == 0: return None
+	return int(response[0][0]['PublishYear'])
 
 def GetAuthorAffiliations(AuthorID):
 	data = {
@@ -61,6 +117,39 @@ def GetPublicationAuthorPairs(PaperID):
 		}
 	}
 	return MAG(data)
+
+def GetAuthorPublicationPairs(AuthorID):
+	data = {
+		"path": "/author/*/paper",
+		"paper": {
+			"type": "Paper",
+			"select": [ "OriginalPaperTitle", "NormalizedPaperTitle", "PublishYear"]
+		},
+		"author": {
+			"type": "Author",
+			"id" : [ AuthorID ],
+			"select":[ "Name" ]
+		}
+	}
+	return MAG(data)
+
+def CountAuthorConference(AuthorID, ConferenceShortName):
+	data = {
+		"path": "/author/*/paper/*/conferenceseries",
+		"paper": {
+			"type": "Paper",
+		},
+		"conferenceseries": {
+			"type": "ConferenceSeries",
+			"ShortName": ConferenceShortName
+		},
+		"author": {
+			"type": "Author",
+			"id" : [ AuthorID ],
+			"select":[ "Name" ]
+		}
+	}
+	return len(MAG(data))
 
 def CheckPublicationAuthor(PaperID, AuthorID):
 	data = {
@@ -141,15 +230,14 @@ def VagueNameMatch(s, t):
 def check(AuthorID, PaperID):
 	global dEbUg
 
-	# Check link
-	if (CheckPublicationAuthor(PaperID, AuthorID)):
-		if dEbUg: print "Linked yes!"
-		return True
-	# todo : Add false link check
-
 	# Get Author Name
 	AuthorName = GetAuthorName(AuthorID)
 	if AuthorName == None: return False
+
+	OriginalPaperTitle = GetOriginalPaperTitle(PaperID)
+	NormalizedPaperTitle = GetNormalizedPaperTitle(PaperID)
+	PublishYear = GetPublishYear(PaperID)
+	if (OriginalPaperTitle == None and NormalizedPaperTitle == None): return False
 
 	# Get Author Author's Affiliations
 	temp = GetAuthorAffiliations(AuthorID)
@@ -166,6 +254,31 @@ def check(AuthorID, PaperID):
 		for AuthorAffiliation in AuthorAffiliations:
 			print AuthorAffiliation
 		print "-" * 30
+
+	# Time Check
+	AuthorPublicationPairs = GetAuthorPublicationPairs(AuthorID)
+	time_min = 9999
+	time_max =-9999
+	count = 0
+
+	for w in AuthorPublicationPairs:
+		if (w[1]['CellID'] != PaperID and \
+			w[1]['PublishYear'] != "" and w[1]['PublishYear'] != "0"):
+				time_max = max(time_max, int(w[1]['PublishYear']))
+				time_min = min(time_min, int(w[1]['PublishYear']))
+				count += 1
+	# todo : coauthor check
+	if count > 0 and (PublishYear > time_min + 80 or PublishYear < time_max - 100):
+		if dEbUg: print "Time interval check Mismatched :("
+		return False
+	if count > 20 and (PublishYear > time_max + 10 or PublishYear < time_min - 10):
+		if dEbUg: print "Time consecutive check Mismatched :("
+		return False
+
+
+	if (CheckPublicationAuthor(PaperID, AuthorID)):
+		return True
+	# todo : Check link
 
 	# Get all authors of this publication
 	PublicationAuthorPairs = GetPublicationAuthorPairs(PaperID)
@@ -188,7 +301,8 @@ def check(AuthorID, PaperID):
 			for w in temp:
 				CandidateAuthorAffiliations += \
 					[ NormalizeString(t) for t in w.split("|") ]
-
+			if (len(CandidateAuthorAffiliations) == 0):
+				return True
 			for CandidateAuthorAffiliation in CandidateAuthorAffiliations:
 				for AuthorAffiliation in AuthorAffiliations:
 					if (CandidateAuthorAffiliation == AuthorAffiliation or
