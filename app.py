@@ -268,13 +268,14 @@ def check(AuthorID, PaperID):
 				time_min = min(time_min, int(w[1]['PublishYear']))
 				count += 1
 	# todo : coauthor check
-	if count > 0 and (PublishYear > time_min + 80 or PublishYear < time_max - 100):
-		if dEbUg: print "Time interval check Mismatched :("
-		return False
-	if count > 20 and (PublishYear > time_max + 10 or PublishYear < time_min - 10):
-		if dEbUg: print "Time consecutive check Mismatched :("
-		return False
-
+	if time_max - time_min <= 80 and count > 5 \
+		and (PublishYear > time_min + 80 or PublishYear < time_max - 80):
+			if dEbUg: print "Time interval check Mismatched :("
+			return False
+	if count > 20 and (PublishYear > time_max + 10 \
+		or PublishYear < time_min - 10):
+			if dEbUg: print "Time consecutive check Mismatched :("
+			return False
 
 	if (CheckPublicationAuthor(PaperID, AuthorID)):
 		return True
